@@ -11,9 +11,9 @@ void setupLedFlash();
 // -------------------- WiFi / endpoints --------------------
 const char *ssid       = "MAKERSPACE";
 const char *password   = "12345678";
-const char *serverUrl  = "http://192.168.0.160:6000/detect";
-const char *resetUrl   = "http://192.168.0.160:6000/reset";
-const char *readyUrl   = "http://192.168.0.160:6000/ready";
+const char *serverUrl  = "http://192.168.0.163:6000/detect";
+const char *resetUrl   = "http://192.168.0.163:6000/reset";
+const char *readyUrl   = "http://192.168.0.163:6000/ready";
 
 // -------------------- Scan interval --------------------
 static const unsigned long SCAN_INTERVAL_MS  = 10000;

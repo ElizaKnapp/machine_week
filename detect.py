@@ -189,7 +189,36 @@ def _classify_cell(cell_bgr):
     return "."
 
 
+def _crop_to_board(img, pad=30):
+    """First-pass crop: locate the board in the full frame and return just that region.
+    Falls back to the full image if the grid lines cannot be found."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    xs, ys, _, _ = _extract_grid_lines(binary_inv)
+    x_inner = _pick_two_inner_lines(xs, img.shape[1])
+    y_inner = _pick_two_inner_lines(ys, img.shape[0])
+    xs_b = _infer_boundaries_from_inner_lines(x_inner, img.shape[1])
+    ys_b = _infer_boundaries_from_inner_lines(y_inner, img.shape[0])
+
+    if xs_b is None or ys_b is None:
+        return img  # can't locate board — use full frame and let detection fail
+
+    x0 = max(0, xs_b[0]  - pad)
+    x1 = min(img.shape[1], xs_b[-1] + pad)
+    y0 = max(0, ys_b[0]  - pad)
+    y1 = min(img.shape[0], ys_b[-1] + pad)
+
+    cropped = img[y0:y1, x0:x1]
+    cv2.imwrite("debug_crop.jpg", cropped)
+    print(f"Board crop: ({x0},{y0}) → ({x1},{y1})")
+    return cropped
+
+
 def detect_board(img):
+    img = _crop_to_board(img)   # zoom in on the board before detailed analysis
+
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
@@ -327,7 +356,7 @@ def detect():
     try:
         board = detect_board(img)
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 404  # grid not detected in image
 
     # Validate the human's move
     if previous_board is None:

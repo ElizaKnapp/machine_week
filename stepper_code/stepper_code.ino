@@ -6,8 +6,8 @@
 // -------------------- WiFi / endpoints --------------------
 const char *ssid        = "MAKERSPACE";
 const char *password    = "12345678";
-const char *getMoveUrl  = "http://192.168.0.160:6000/get-move";
-const char *readyUrl    = "http://192.168.0.160:6000/ready";
+const char *getMoveUrl  = "http://192.168.0.163:6000/get-move";
+const char *readyUrl    = "http://192.168.0.163:6000/ready";
 
 // -------------------- Stepper / servo pins --------------------
 const int X_STEP_PIN = D1;
@@ -197,11 +197,13 @@ void postReady() {
     Serial.println("[http] Posted /ready");
 }
 
-// Returns the move number from {"move": N}, or -1 on HTTP error.
+// Returns the move number from {"move": N}.
+// Returns -1 when the server sends the reset signal.
+// Returns -2 on HTTP/WiFi error (caller should skip the cycle).
 int fetchMove() {
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[wifi] not connected");
-        return -1;
+        return -2;
     }
 
     HTTPClient http;
@@ -212,7 +214,7 @@ int fetchMove() {
     if (code != 200) {
         Serial.printf("[http] GET /get-move failed: %d\n", code);
         http.end();
-        return -1;
+        return -2;
     }
 
     String body = http.getString();
@@ -251,9 +253,7 @@ void setup() {
     while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
     Serial.printf("\nConnected — IP: %s\n", WiFi.localIP().toString().c_str());
 
-    Serial.println("Drawing grid...");
-    drawGrid();
-    Serial.println("Ready. Polling /get-move every 2 seconds.");
+    Serial.println("Ready. Polling /get-move every 2 seconds. Type 'start' on the camera board to begin.");
     Serial.println("USB commands: GRID, X1-X9, O1-O9, HOME, H, U, D, XR, XL, YU, YD");
 }
 
@@ -278,8 +278,8 @@ void loop() {
         lastPoll = now;
 
         int move = fetchMove();
-        if (move < 0) {
-            // HTTP error — skip this cycle
+        if (move == -2) {
+            // HTTP/WiFi error — skip this cycle
         } else if (move == -1) {
             // Reset signal — re-home and redraw grid for a new game
             Serial.println("Reset signal received — re-homing and redrawing grid.");
