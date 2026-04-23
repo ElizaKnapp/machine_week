@@ -2,8 +2,6 @@
 
 A two-board ESP32 system that plays tic-tac-toe against a human. The robot draws **X** with a pen plotter; the human draws **O** by hand. Both boards coordinate through a Python server over WiFi — there is no direct wiring between them.
 
-For the full technical spec, see [`SPEC.md`](SPEC.md).
-
 ---
 
 ## Hardware
@@ -106,6 +104,49 @@ No wires between the boards — everything goes through the laptop.
 
 ---
 
+## HTTP API
+
+All endpoints live on `http://<laptop-ip>:6000`. The boards talk only to the Python server, never to each other.
+
+### `POST /detect`
+
+Called by the camera board every ~10 s while a game is active.
+
+- **Request:** raw JPEG bytes, `Content-Type: image/jpeg`
+- **Response 200:** `{"board": [[".", "O", "."], [".", "X", "."], [".", ".", "."]], "move": N}` — `move` is the 1-indexed cell chosen for X, or `null` if the frame didn't update game state
+- **Errors:** `400` no image data / decode failure; `404` grid not found in image
+
+A move is only accepted if exactly one new O was placed in a previously empty cell and no existing mark changed. Invalid frames are ignored and the previous `move` is returned.
+
+### `GET /get-move`
+
+Polled by the motor board every 2 s.
+
+- **Response 200:** `{"move": N}`
+  - `-1` — reset signal (re-home, redraw grid, then `POST /ready`). Served once, then cleared.
+  - `0` — idle, no pending move
+  - `1`–`9` — draw X in that cell
+
+### `POST /reset`
+
+Called by the camera board when the user types `start`. Clears game state and queues `move=-1` for the motor board's next poll.
+
+- **Request:** `{}` · **Response:** `{"status": "ok"}`
+
+### `POST /ready`
+
+Called by the motor board after it finishes re-homing and drawing the grid.
+
+- **Request:** `{}` · **Response:** `{"status": "ok"}`
+
+### `GET /ready`
+
+Polled by the camera board (every 3 s, up to 2 min) while it waits for the grid to be drawn.
+
+- **Response 200:** `{"ready": true}` or `{"ready": false}`
+
+---
+
 ## Serial Commands
 
 ### Camera board (USB serial, 115200 baud)
@@ -143,6 +184,5 @@ Cell numbering:
 |---|---|
 | Pen taps up and down instead of drawing strokes | Power brownout. Run the motor board from a battery instead of laptop USB. |
 | `esp_camera.h: No such file` on the camera board | Install the Espressif ESP32 board package in Arduino IDE. |
-| `start` doesn't trigger grid redraw on the motor | Known bug — see SPEC.md §11. The `move == -1` reset branch in `stepper_code.ino` is currently unreachable. |
 | Camera board won't connect to WiFi | Check SSID/password in `camera_code/camera_code.ino`. The camera prints WiFi status on its USB serial monitor at boot. |
 | Detection returns garbage | Check lighting and the camera's view of the full grid. Inspect `latest.jpg`, `debug_grid.jpg`, and `images/cell_r*_c*.jpg` after a scan. |

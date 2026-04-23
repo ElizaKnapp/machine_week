@@ -40,16 +40,16 @@ const int   yDownSign   = 1;
 // Right edge = boardOriginX + 3*cellSize               (closest to 0)
 // Top edge   = boardOriginY                            (most negative Y)
 // Bottom edge = boardOriginY + 3*cellSize              (closest to 0)
-const long boardOriginX = -8000;  // further from home → arm out of camera frame
-const long boardOriginY = -8000;
-const long cellSize     =  2000;
+const long boardOriginX = -5000;
+const long boardOriginY = -5000;
+const long cellSize     =  1500;
 const long inset        =   220;
 const long jogStep      =   500;
 
 // Park position — large positive command pushes the arm well below-left of
 // home and completely out of the camera's field of view.
-const long parkX = 2000;
-const long parkY = 2000;
+const long parkX = 500;
+const long parkY = 500;
 
 // -------------------- Game state --------------------
 int lastMove = 0;   // last move drawn (0 = none / game over)
