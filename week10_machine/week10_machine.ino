@@ -25,9 +25,9 @@ const long cellSize = 1500;
 const long inset = 220;
 const long jogStep = 500;
 
-// D7 (GPIO20) <- camera GPIO 14 TX
-// D6 (GPIO21) -> camera GPIO 13 RX
-#define CAM_RX_PIN D7
+// D10 (GPIO10) <- camera GPIO 14 TX
+// D6  (GPIO21) -> camera GPIO 13 RX
+#define CAM_RX_PIN D10
 #define CAM_TX_PIN D6
 #define CAM_BAUD   9600
 HardwareSerial CamSerial(1);

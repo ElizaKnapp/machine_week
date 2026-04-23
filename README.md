@@ -14,8 +14,8 @@ Two ESP32 boards that play tic-tac-toe against a human. The camera board handles
 **Wiring between boards:**
 
 ```
-Camera GPIO 14 (TX) ──► Motor D7 / GPIO20 (RX)
-Camera GPIO 13 (RX) ◄── Motor D6 / GPIO21 (TX)
+Camera GPIO 14 (TX) ──► Motor D10 / GPIO10 (RX)
+Camera GPIO 13 (RX) ◄── Motor D6  / GPIO21 (TX)
 GND ◄──────────────────► GND
 ```
 
