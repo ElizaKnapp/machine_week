@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify
 import numpy as np
 import cv2
 import os
+#communicates with arduino
+import serial
+import serial.tools.list_ports
+import time
 
 app = Flask(__name__)
 
@@ -285,9 +289,39 @@ def detect_board(img):
 
     return board
 
+#TURN CONTROL
+def count_moves(board):
+    flat = sum(board, [])
+    return flat.count("X"), flat.count("O")
+
+#code for game logic (choosing positon- currently takes first empty spot)
+def choose_move(board):
+    positions = board_to_positions(board)
+
+    # take first empty spot
+    for i in range(1, 10):
+        if positions[i] == ".":
+            return i
+
+    return None
+
+def board_to_positions(board):
+    positions = {}
+    idx = 1
+    for r in range(3):
+        for c in range(3):
+            positions[idx] = board[r][c]
+            idx += 1
+    return positions
+
+def send_move_to_arduino(move, player="X"):
+    cmd = f"{player}{move}\n"
+    print("Sending:", cmd)
+    arduino.write(cmd.encode())
 
 @app.route("/detect", methods=["POST"])
 def detect():
+    print("Were are detecting")
     data = request.data
     if not data:
         return jsonify({"error": "no image received"}), 400
@@ -298,18 +332,30 @@ def detect():
     if img is None:
         return jsonify({"error": "could not decode image"}), 400
 
-    cv2.imwrite("latest.jpg", img)
-
     try:
         board = detect_board(img)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-    print("board detected")
-    print(board)
+    # --- turn logic ---
+    x_count, o_count = count_moves(board)
 
-    return jsonify({"board": board})
+    move = None
+
+    # bot is X, human is O
+    if x_count <= o_count:
+        move = choose_move(board)
+        if move:
+            send_move_to_arduino(move, player="X")
+#---end of turn logic----
+    return jsonify({
+        "board": board,
+        "move": move
+    })
 
 
 if __name__ == "__main__":
+    # TODO: update port based on individual configurations
+    arduino = serial.Serial('/dev/cu.usbmodem101', 115200)
+    time.sleep(2)
     app.run(host="0.0.0.0", port=6000, debug=True)
