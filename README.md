@@ -25,8 +25,8 @@ GND ◄──────────────────► GND
 
 | File | Runs on |
 |---|---|
-| `CameraWebServer.ino` | Camera board (ESP32-CAM) |
-| `week10_machine.ino` | Motor board (XIAO ESP32-C3) |
+| `machine_week.ino` | Camera board (ESP32-CAM) |
+| `week10_machine/week10_machine.ino` | Motor board (XIAO ESP32-C3) |
 | `detect.py` | Laptop (Python Flask server) |
 
 ---
@@ -40,7 +40,7 @@ pip install flask opencv-python
 python detect.py
 ```
 
-The server listens on port 6000. Update `serverUrl` in `CameraWebServer.ino` if your laptop's IP differs from `192.168.0.163`.
+The server listens on port 6000. Update `serverUrl` in `machine_week.ino` if your laptop's IP differs from `192.168.0.160`.
 
 **2. Motor board**
 
@@ -48,7 +48,7 @@ Flash `week10_machine.ino`. Open the serial monitor and jog the plotter to your 
 
 **3. Camera board**
 
-Flash `CameraWebServer.ino`. Connect to the `MAKERSPACE` WiFi network (or update the credentials in the sketch).
+Flash `machine_week.ino`. Connect to the `MAKERSPACE` WiFi network (or update the credentials in the sketch).
 
 ---
 

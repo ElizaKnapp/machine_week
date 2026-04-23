@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "esp_camera.h"
+#include <esp_camera.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 
@@ -13,7 +13,7 @@ const char *ssid = "MAKERSPACE";
 const char *password = "12345678";
 
 // Replace with your computer's local IP address
-const char *serverUrl = "http://192.168.0.163:6000/detect";
+const char *serverUrl = "http://192.168.0.160:6000/detect";
 
 // -------------------- Motor UART --------------------
 // AI Thinker free pins (not used by OV2640 or PSRAM):
