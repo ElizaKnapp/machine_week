@@ -15,6 +15,8 @@ motor_ready    = False  # True after motor posts /ready
 # -------------------- Vision helpers --------------------
 
 def _cluster_positions(vals, gap=20):
+    """Cluster raw pixel positions and return (centroid, vote_count) pairs
+    sorted by vote count descending so callers can take the top-N."""
     if not vals:
         return []
     vals = sorted(vals)
@@ -24,11 +26,64 @@ def _cluster_positions(vals, gap=20):
             groups[-1].append(v)
         else:
             groups.append([v])
-    return [int(sum(g) / len(g)) for g in groups]
+    # Return (centroid, votes) sorted by votes desc so top-2 = strongest lines
+    scored = sorted(
+        [(int(sum(g) / len(g)), len(g)) for g in groups],
+        key=lambda x: -x[1]
+    )
+    return scored
 
 
-def _extract_grid_lines(binary_inv):
-    h, w = binary_inv.shape
+def _top2(clusters):
+    """Return the 2 highest-vote cluster centroids, sorted by position."""
+    top = [pos for pos, _ in clusters[:2]]
+    return sorted(top)
+
+
+def _hough_detect_lines(gray):
+    """Detect near-horizontal and near-vertical lines via Canny + HoughLinesP.
+    More robust than morphological projection for blurry or slightly tilted grids.
+    Returns at most 2 lines per axis (the 2 most-voted clusters)."""
+    h, w = gray.shape
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    edges   = cv2.Canny(blurred, 20, 80)
+
+    min_len   = max(20, min(w, h) // 6)
+    threshold = max(20, min_len // 2)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180,
+                             threshold=threshold,
+                             minLineLength=min_len,
+                             maxLineGap=15)
+    if lines is None:
+        return [], []
+
+    x_pos, y_pos = [], []
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        angle = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
+        if angle < 25 or angle > 155:
+            y_pos.append((y1 + y2) // 2)
+        elif 65 < angle < 115:
+            x_pos.append((x1 + x2) // 2)
+
+    xs = _top2(_cluster_positions(x_pos, gap=max(8, w // 40)))
+    ys = _top2(_cluster_positions(y_pos, gap=max(8, h // 40)))
+    return xs, ys
+
+
+def _extract_grid_lines(gray):
+    """Detect the 2 vertical and 2 horizontal grid lines.
+    Uses adaptive thresholding + morphological projection as the primary method,
+    with Hough lines as a fallback for blurry or slightly tilted images.
+    Always picks the 2 strongest (highest-vote) lines per axis."""
+    h, w = gray.shape
+
+    # Adaptive thresholding is more robust than global Otsu when a dark object
+    # (e.g. the machine arm) skews the intensity histogram.
+    binary_inv = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV, 21, 8
+    )
 
     horiz_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(15, w // 8), 1))
     vert_kernel  = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(15, h // 8)))
@@ -39,11 +94,23 @@ def _extract_grid_lines(binary_inv):
     horiz_sum = np.sum(horiz > 0, axis=1)
     vert_sum  = np.sum(vert  > 0, axis=0)
 
-    y_candidates = np.where(horiz_sum > 0.4 * horiz_sum.max())[0].tolist() if horiz_sum.max() > 0 else []
-    x_candidates = np.where(vert_sum  > 0.4 * vert_sum.max())[0].tolist()  if vert_sum.max()  > 0 else []
+    thresh       = 0.25
+    y_candidates = np.where(horiz_sum > thresh * horiz_sum.max())[0].tolist() if horiz_sum.max() > 0 else []
+    x_candidates = np.where(vert_sum  > thresh * vert_sum.max())[0].tolist()  if vert_sum.max()  > 0 else []
 
-    ys = _cluster_positions(y_candidates, gap=max(8, h // 40))
-    xs = _cluster_positions(x_candidates, gap=max(8, w // 40))
+    # Take the 2 strongest clusters per axis
+    xs = _top2(_cluster_positions(x_candidates, gap=max(8, w // 40)))
+    ys = _top2(_cluster_positions(y_candidates, gap=max(8, h // 40)))
+
+    # Hough fallback: kick in for whichever axis came up short
+    if len(xs) < 2 or len(ys) < 2:
+        hx, hy = _hough_detect_lines(gray)
+        if len(xs) < 2 and len(hx) >= 2:
+            print("  [lines] using Hough for X axis")
+            xs = hx
+        if len(ys) < 2 and len(hy) >= 2:
+            print("  [lines] using Hough for Y axis")
+            ys = hy
 
     return xs, ys, horiz, vert
 
@@ -84,9 +151,26 @@ def _infer_boundaries_from_inner_lines(inner_lines, limit):
     return [left, a, b, right]
 
 
-def _classify_cell(cell_bgr):
+def _classify_cell(cell_bgr, gray_path=None):
     gray = cv2.cvtColor(cell_bgr, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    blur = gray
+
+
+    if gray_path:
+        cv2.imwrite(gray_path, blur)
+
+    print(blur.min())
+    print(blur.max())
+
+    # Reject blank cells before Otsu — Otsu on a uniform image produces ~50% noise.
+    # Count pixels meaningfully darker than the background (ink on paper).
+    background = np.percentile(blur, 40)   # bright background level
+    print(background)
+
+    dark_ratio  = np.sum(blur < background - 18) / blur.size
+    print(f"    std={blur.std():.1f}  dark_ratio={dark_ratio:.3f}")
+    if dark_ratio < 0.04:   # less than 4% real dark pixels → blank
+        return "."
 
     _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
@@ -99,7 +183,7 @@ def _classify_cell(cell_bgr):
         return "."
 
     ink_ratio = np.count_nonzero(roi) / roi.size
-    if ink_ratio < 0.06:
+    if ink_ratio < 0.10:
         return "."
 
     contours, hierarchy = cv2.findContours(roi, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
@@ -134,20 +218,20 @@ def _classify_cell(cell_bgr):
         cy = roi_h // 2
         yy, xx = np.ogrid[:roi_h, :roi_w]
         dist2    = (xx - cx) ** 2 + (yy - cy) ** 2
-        outer_r  = min(roi_h, roi_w) * 0.32
-        inner_r  = outer_r * 0.55
+        outer_r  = min(roi_h, roi_w) * 0.45   # wider ring catches larger O's
+        inner_r  = outer_r * 0.50
 
         ring_mask   = (dist2 <= outer_r ** 2) & (dist2 >= inner_r ** 2)
-        center_mask = dist2 <= (inner_r * 0.65) ** 2
+        center_mask = dist2 <= (inner_r * 0.60) ** 2
 
         ring_ratio   = np.count_nonzero(roi[ring_mask])   / max(np.count_nonzero(ring_mask),   1)
         center_ratio = np.count_nonzero(roi[center_mask]) / max(np.count_nonzero(center_mask), 1)
         ring_score   = ring_ratio - center_ratio
 
         o_score = 0.0
-        if 0.65 <= circularity <= 1.15: o_score += 1.2
-        if 0.8  <= aspect      <= 1.2:  o_score += 1.0
-        if has_hole:                    o_score += 1.6
+        if 0.55 <= circularity <= 1.25: o_score += 1.2  # looser — hand-drawn circles
+        if 0.5  <= aspect      <= 2.0:  o_score += 1.0  # allow ovals (taller or wider)
+        if has_hole:                    o_score += 1.6   # bonus if hole is clear
         if ring_score > 0.16:           o_score += 1.4
         if ring_score > 0.24:           o_score += 0.8
 
@@ -171,10 +255,10 @@ def _classify_cell(cell_bgr):
     center_ratio = np.count_nonzero(center_box) / max(center_box.size, 1)
 
     x_score = 0.0
-    if diag1_ratio > 0.42:                              x_score += 1.2
-    if diag2_ratio > 0.42:                              x_score += 1.2
-    if diag1_ratio > 0.52 and diag2_ratio > 0.52:      x_score += 1.2
-    if center_ratio > 0.22:                             x_score += 0.6
+    if diag1_ratio > 0.36:                              x_score += 1.2
+    if diag2_ratio > 0.36:                              x_score += 1.2
+    if diag1_ratio > 0.46 and diag2_ratio > 0.46:      x_score += 1.2
+    if center_ratio > 0.18:                             x_score += 0.6
 
     print(
         f"    ink={ink_ratio:.3f}, O_score={best_o_score:.2f}, "
@@ -182,38 +266,30 @@ def _classify_cell(cell_bgr):
         f"diag2={diag2_ratio:.2f}, center={center_ratio:.2f}"
     )
 
-    if best_o_score >= 3.8 and best_o_score >= x_score + 0.9:
+    # Diagonal veto: if both diagonals carry significant ink it's an X, not an O.
+    both_diags = diag1_ratio > 0.28 and diag2_ratio > 0.28
+    if best_o_score >= 3.0 and best_o_score >= x_score + 0.7 and not both_diags:
         return "O"
-    if x_score >= 3.2 and x_score >= best_o_score + 0.7:
+    if x_score >= 2.8 and x_score >= best_o_score + 0.5:
         return "X"
     return "."
 
 
-def _crop_to_board(img, pad=30):
-    """First-pass crop: locate the board in the full frame and return just that region.
-    Falls back to the full image if the grid lines cannot be found."""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+def _crop_to_board(img):
+    """Crop to the centre third of the frame in both dimensions.
+    The board is positioned in the centre of the camera view, and this
+    eliminates the pen arm (near the home corner) and blank margins."""
+    h, w = img.shape[:2]
+    x0, x1 = w // 4, 3 * w // 4
+    y0, y1 = h // 3, 5 * h // 6
 
-    xs, ys, _, _ = _extract_grid_lines(binary_inv)
-    x_inner = _pick_two_inner_lines(xs, img.shape[1])
-    y_inner = _pick_two_inner_lines(ys, img.shape[0])
-    xs_b = _infer_boundaries_from_inner_lines(x_inner, img.shape[1])
-    ys_b = _infer_boundaries_from_inner_lines(y_inner, img.shape[0])
+    # Save annotated full frame so you can verify the crop region
+    annotated = img.copy()
+    cv2.rectangle(annotated, (x0, y0), (x1, y1), (0, 255, 0), 3)
+    cv2.imwrite("debug_box.jpg", annotated)
+    print(f"Centre crop: ({x0},{y0}) → ({x1},{y1})")
 
-    if xs_b is None or ys_b is None:
-        return img  # can't locate board — use full frame and let detection fail
-
-    x0 = max(0, xs_b[0]  - pad)
-    x1 = min(img.shape[1], xs_b[-1] + pad)
-    y0 = max(0, ys_b[0]  - pad)
-    y1 = min(img.shape[0], ys_b[-1] + pad)
-
-    cropped = img[y0:y1, x0:x1]
-    cv2.imwrite("debug_crop.jpg", cropped)
-    print(f"Board crop: ({x0},{y0}) → ({x1},{y1})")
-    return cropped
+    return img[y0:y1, x0:x1]
 
 
 def detect_board(img):
@@ -222,9 +298,7 @@ def detect_board(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    xs, ys, _, _ = _extract_grid_lines(binary_inv)
+    xs, ys, _, _ = _extract_grid_lines(blur)
 
     x_inner = _pick_two_inner_lines(xs, img.shape[1])
     y_inner = _pick_two_inner_lines(ys, img.shape[0])
@@ -235,10 +309,11 @@ def detect_board(img):
     if xs is None or ys is None:
         raise ValueError("Could not detect 2 vertical and 2 horizontal inner grid lines")
 
+    # Draw only the 2 inner lines per axis (xs/ys[1] and xs/ys[2])
     debug = img.copy()
-    for x in xs:
+    for x in (xs[1], xs[2]):
         cv2.line(debug, (x, 0), (x, debug.shape[0] - 1), (0, 255, 0), 2)
-    for y in ys:
+    for y in (ys[1], ys[2]):
         cv2.line(debug, (0, y), (debug.shape[1] - 1, y), (0, 255, 0), 2)
     cv2.imwrite("debug_grid.jpg", debug)
 
@@ -265,9 +340,10 @@ def detect_board(img):
 
             cell      = img[cy0:cy1, cx0:cx1]
             cell_path = os.path.join("images", f"cell_r{r}_c{c}.jpg")
+            gray_path = os.path.join("images", f"cell_r{r}_c{c}_gray.jpg")
             cv2.imwrite(cell_path, cell)
 
-            label = _classify_cell(cell)
+            label = _classify_cell(cell, gray_path=gray_path)
             print(f"Cell ({r},{c}): {label}")
             row.append(label)
         board.append(row)
