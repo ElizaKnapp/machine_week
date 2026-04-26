@@ -163,7 +163,7 @@
 
   <!-- 1. OVERVIEW -->
   <section id="overview">
-    <div class="section-num">§ 01 — Overview</div>
+    <div class="section-num">Overview</div>
     <h2>Overview</h2>
     <p class="blank">Our goal for this project was to make a Tic-Tac-Toe Drawing machine that is able to play with you and take turn putting X's and O's on the sheet. The goal was for the machine to use computer vision and analyze snapshots ofthe board to determine where the other player placed their O and where it should place its next move.</p>
     <div>
@@ -180,7 +180,7 @@
 
   <!-- 3. MOCKUPS -->
   <section id="mockups">
-    <div class="section-num">§ 03 — Mockups</div>
+    <div class="section-num">Mockups</div>
     <h2>Mockups &amp; Sketches</h2>
     <p class="blank">Early sketches, diagrams, or CAD screenshots. Annotate what each shows.</p>
     <div class="img-row">
@@ -192,13 +192,11 @@
 
   <!-- 4. CONSTRUCTION -->
   <section id="construction">
-    <div class="section-num">§ 04 — Construction</div>
+    <div class="section-num">Construction</div>
     <h2>Construction</h2>
-    <p class="blank">Document the build process here. What did you make, how did you put it together, what decisions were made along the way?</p>
-    <div class="img-row">
-      <div class="img-placeholder">Build photo 1</div>
-      <div class="img-placeholder">Build photo 2</div>
-    </div>
+    <p class="blank">To construct our drawing machine we followed the build kit directions exactly, and our end effector was simply a marker. 
+      Where our product required additional design, was modifying an ESP32 CAM holder to position the camera directly above the piece of paper to fully capture the image. Which can also be seen in the image above.
+       </p>
     <p class="blank">A big issue that we ran into was with the computer vision and getting the python code to actually detect the changes on the board. It was okay at detecting X's and not good at detecting O's at all. Another more minor issue
       was that orignally our camera talked to python code over a server, and the python communicated with the ESP32 (which controlled the motors) over serial. This caused issues with serial monitor overloads and brownouts. We then switched to have python communicated with ESP32 over server as well, and connected the ESP32 to external power source (instead of laptop).
 
@@ -206,40 +204,27 @@
     <div class="img-placeholder">Build photo 3 — assembly / wiring</div>
   </section>
 
-  <!-- 5. TEST RUNS -->
-  <section id="testruns">
-    <div class="section-num">§ 05 — Test Runs</div>
-    <h2>Test Runs</h2>
-    <p class="blank">Log each test session below. Duplicate a block for each run.</p>
+ <!--Code -->
+ <section id="Code">
+   <div class="section-num">Code</div>
+   <h2>Code</h2>
+   <p class="blank">.</p>
 
-    <div class="test-run">
-      <div class="run-header">
-        <span class="run-id">RUN-001</span>
-        <span class="run-title"><!-- Test name --></span>
-        <span class="run-date"><!-- Date --></span>
-      </div>
-      <p class="blank">Setup: what settings / configuration were used?</p>
-      <p class="blank">Result: what happened?</p>
-      <div class="img-placeholder" style="min-height:100px;">Output / photo</div>
-    </div>
 
-    <div class="test-run">
-      <div class="run-header">
-        <span class="run-id">RUN-002</span>
-        <span class="run-title"><!-- Test name --></span>
-        <span class="run-date"><!-- Date --></span>
-      </div>
-      <p class="blank">Setup:</p>
-      <p class="blank">Result:</p>
-      <div class="img-placeholder" style="min-height:100px;">Output / photo</div>
-    </div>
-
-    <div class="note">Duplicate a test-run block above for each additional session.</div>
-  </section>
+   <div class="test-run">
+     <div class="run-header">
+       <span class="run-id">Code 1</span>
+       <span class="run-title"><!-- Test name --></span>
+       <span class="run-date"><!-- Date --></span>
+     </div>
+     <p class="blank">Notes</p>
+   </div>
+ </section>
 
 
 
-  <!-- 7. NOTES -->
+
+  <!-- 7. NOTES & Next Steps -->
   <section id="notes">
     <div class="section-num">§ 07 — Notes</div>
     <h2>Challenges; Next Steps</h2>
